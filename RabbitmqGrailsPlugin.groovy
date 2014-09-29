@@ -1,12 +1,7 @@
-import static org.springframework.amqp.core.Binding.DestinationType.QUEUE
-
+import groovy.util.logging.Slf4j
 import org.aopalliance.aop.Advice
 import org.codehaus.groovy.grails.commons.ServiceArtefactHandler
-import org.grails.rabbitmq.RabbitConfigurationHolder
-import org.grails.rabbitmq.RabbitDynamicMethods
-import org.grails.rabbitmq.RabbitErrorHandler
-import org.grails.rabbitmq.RabbitQueueBuilder
-import org.grails.rabbitmq.RabbitServiceConfigurer
+import org.grails.rabbitmq.*
 import org.springframework.amqp.core.Binding
 import org.springframework.amqp.core.Queue
 import org.springframework.amqp.rabbit.config.StatefulRetryOperationsInterceptorFactoryBean
@@ -20,7 +15,9 @@ import org.springframework.retry.policy.MapRetryContextCache
 import org.springframework.retry.policy.SimpleRetryPolicy
 import org.springframework.retry.support.RetryTemplate
 
+import static org.springframework.amqp.core.Binding.DestinationType.QUEUE
 
+@Slf4j
 class RabbitmqGrailsPlugin {
     // the plugin version
     def version = "1.0.0"
@@ -45,10 +42,10 @@ class RabbitmqGrailsPlugin {
     def description = "The RabbitMQ plugin provides integration with the RabbitMQ Messaging System."
 
     def license = "APACHE"
-    def organization = [ name: "SpringSource", url: "http://www.springsource.org/" ]
-    def developers = [ [ name: "Peter Ledbrook", email: "pledbrook@vmware.com" ] ]
-    def issueManagement = [ system: "JIRA", url: "http://jira.codehaus.org/browse/GRAILSPLUGINS" ]
-    def scm = [ url: "https://github.com/grails-plugins/grails-rabbitmq" ]
+    def organization = [name: "SpringSource", url: "http://www.springsource.org/"]
+    def developers = [[name: "Peter Ledbrook", email: "pledbrook@vmware.com"]]
+    def issueManagement = [system: "JIRA", url: "http://jira.codehaus.org/browse/GRAILSPLUGINS"]
+    def scm = [url: "https://github.com/grails-plugins/grails-rabbitmq"]
 
     // URL to the plugin's documentation
     def documentation = "http://grails-plugins.github.com/grails-rabbitmq/"
@@ -72,7 +69,7 @@ class RabbitmqGrailsPlugin {
 
         def messageConverterBean = rabbitmqConfig?.messageConverterBean
 
-        if(!connectionFactoryUsername || !connectionFactoryPassword || !connectionFactoryHostname) {
+        if (!connectionFactoryUsername || !connectionFactoryPassword || !connectionFactoryHostname) {
             log.error 'RabbitMQ connection factory settings (rabbitmq.connectionfactory.username, rabbitmq.connectionfactory.password and rabbitmq.connectionfactory.hostname) must be defined in Config.groovy'
         } else {
 
@@ -99,34 +96,34 @@ class RabbitmqGrailsPlugin {
             rabbitTemplate(RabbitTemplate) {
                 connectionFactory = rabbitMQConnectionFactory
                 if (messageConverterBean) {
-                     messageConverter = ref(messageConverterBean)
-                 } else {
-                     def converter = new SimpleMessageConverter()
-                     converter.createMessageIds = true
-                     messageConverter = converter
-                 }
+                    messageConverter = ref(messageConverterBean)
+                } else {
+                    def converter = new SimpleMessageConverter()
+                    converter.createMessageIds = true
+                    messageConverter = converter
+                }
             }
             adm(RabbitAdmin, rabbitMQConnectionFactory)
             rabbitErrorHandler(RabbitErrorHandler)
 
             // Add beans to hook up services as AMQP listeners.
             Set registeredServices = new HashSet()
-            for(service in application.serviceClasses) {
+            for (service in application.serviceClasses) {
                 def serviceConfigurer = new RabbitServiceConfigurer(service, rabbitmqConfig)
-                if(!serviceConfigurer.isListener() || !configHolder.isServiceEnabled(service)) continue
+                if (!serviceConfigurer.isListener() || !configHolder.isServiceEnabled(service)) continue
 
                 def propertyName = service.propertyName
-                if(!registeredServices.add(propertyName)) {
+                if (!registeredServices.add(propertyName)) {
                     throw new IllegalArgumentException(
                             "Unable to initialize rabbitmq listeners properly." +
-                            " More than one service named ${propertyName}.")
+                                    " More than one service named ${propertyName}.")
                 }
 
                 serviceConfigurer.configure(delegate)
             }
 
             def queuesConfig = application.config.rabbitmq?.queues
-            if(queuesConfig) {
+            if (queuesConfig) {
                 def queueBuilder = new RabbitQueueBuilder()
                 queuesConfig = queuesConfig.clone()
                 queuesConfig.delegate = queueBuilder
@@ -165,7 +162,7 @@ class RabbitmqGrailsPlugin {
                         log.debug "Registering binding between exchange '${binding.exchange}' & queue '${binding.queue}'"
                     }
 
-                    def args = [ ref("grails.rabbit.exchange.${binding.exchange}"), ref ("grails.rabbit.queue.${binding.queue}") ]
+                    def args = [ref("grails.rabbit.exchange.${binding.exchange}"), ref("grails.rabbit.queue.${binding.queue}")]
                     if (binding.rule) {
                         log.debug "Binding with rule '${binding.rule}'"
 
@@ -174,16 +171,16 @@ class RabbitmqGrailsPlugin {
                         args << (binding.rule instanceof CharSequence ? binding.rule.toString() : binding.rule)
                     }
 
-                    "grails.rabbit.binding.${binding.exchange}.${binding.queue}"(Binding, binding.queue, QUEUE, binding.exchange, binding.rule, binding.arguments )
+                    "grails.rabbit.binding.${binding.exchange}.${binding.queue}"(Binding, binding.queue, QUEUE, binding.exchange, binding.rule, binding.arguments)
                 }
             }
 
             rabbitRetryHandler(StatefulRetryOperationsInterceptorFactoryBean) {
                 def retryPolicy = new SimpleRetryPolicy()
                 def maxRetryAttempts = 1
-                if(rabbitmqConfig?.retryPolicy?.containsKey('maxAttempts')) {
+                if (rabbitmqConfig?.retryPolicy?.containsKey('maxAttempts')) {
                     def maxAttemptsConfigValue = rabbitmqConfig.retryPolicy.maxAttempts
-                    if(maxAttemptsConfigValue instanceof Integer) {
+                    if (maxAttemptsConfigValue instanceof Integer) {
                         maxRetryAttempts = maxAttemptsConfigValue
                     } else {
                         log.error "rabbitmq.retryPolicy.maxAttempts [$maxAttemptsConfigValue] of type [${maxAttemptsConfigValue.getClass().getName()}] is not an Integer and will be ignored.  The default value of [${maxRetryAttempts}] will be used"
@@ -195,7 +192,7 @@ class RabbitmqGrailsPlugin {
                 backOffPolicy.backOffPeriod = 5000
 
                 def retryTemplate = new RetryTemplate()
-                retryTemplate.retryPolicy  = retryPolicy
+                retryTemplate.retryPolicy = retryPolicy
                 retryTemplate.backOffPolicy = backOffPolicy
 
                 retryOperations = retryTemplate
@@ -208,7 +205,7 @@ class RabbitmqGrailsPlugin {
     }
 
     private addDynamicMessageSendingMethods(classes, ctx) {
-        if(ctx.rabbitMQConnectionFactory) {
+        if (ctx.rabbitMQConnectionFactory) {
             classes.each { clz ->
                 RabbitDynamicMethods.applyAllMethods(clz, ctx)
             }
@@ -217,25 +214,30 @@ class RabbitmqGrailsPlugin {
 
     def doWithApplicationContext = { applicationContext ->
         def containerBeans = applicationContext.getBeansOfType(SimpleMessageListenerContainer)
-        if(applicationContext.rabbitTemplate?.messageConverter instanceof org.springframework.amqp.support.converter.AbstractMessageConverter) {
+        if (applicationContext.rabbitTemplate?.messageConverter instanceof org.springframework.amqp.support.converter.AbstractMessageConverter) {
             applicationContext.rabbitTemplate.messageConverter.createMessageIds = true
         }
         containerBeans.each { beanName, bean ->
-            if(isServiceListener(beanName)) {
+            if (isServiceListener(beanName)) {
                 initialiseAdviceChain bean, applicationContext
-
-                // Now that the listener is properly configured, we can start it.
-                bean.start()
+                new Timer().runAfter(3000) {
+                    try {
+                        log.info('Starting bean {}', beanName)
+                        bean.start()
+                    } catch (exp) {
+                        log.error("Error starting bean ${beanName}", exp)
+                    }
+                }
             }
         }
     }
 
     def onChange = { evt ->
-        if(evt.source instanceof Class) {
-            addDynamicMessageSendingMethods ([evt.source], evt.ctx)
+        if (evt.source instanceof Class) {
+            addDynamicMessageSendingMethods([evt.source], evt.ctx)
 
             // If a service has changed, reload the associated beans
-            if(isServiceEventSource(application, evt.source)) {
+            if (isServiceEventSource(application, evt.source)) {
                 def serviceGrailsClass = application.addArtefact(ServiceArtefactHandler.TYPE, evt.source)
                 def serviceConfigurer = new RabbitServiceConfigurer(
                         serviceGrailsClass,
